@@ -1,0 +1,17 @@
+{
+  "name": "2chat-p2p-messenger",
+  "version": "1.0.0",
+  "description": "Private real-time 1-on-1 peer-to-peer chat application ready for Vercel deployment.",
+  "scripts": {
+    "start": "npx serve ."
+  },
+  "keywords": [
+    "chat",
+    "realtime",
+    "webrtc",
+    "peerjs",
+    "vercel"
+  ],
+  "author": "",
+  "license": "MIT"
+}

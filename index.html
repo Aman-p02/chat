@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>2Chat - Private 1-on-1 Realtime Chat</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💬</text></svg>">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PeerJS Client CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white">
+
+  <!-- Background decorative glow -->
+  <div class="fixed inset-0 overflow-hidden pointer-events-none -z-10">
+    <div class="absolute -top-40 -left-40 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl"></div>
+    <div class="absolute top-1/2 -right-40 w-96 h-96 bg-emerald-600/20 rounded-full blur-3xl"></div>
+    <div class="absolute -bottom-40 left-1/3 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl"></div>
+  </div>
+
+  <!-- Top Navigation / Header -->
+  <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-20">
+    <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg leading-tight bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">2Chat</h1>
+          <p class="text-xs text-slate-400">Private 1-on-1 P2P Messenger</p>
+        </div>
+      </div>
+
+      <!-- Action badges / controls in header -->
+      <div class="flex items-center space-x-2">
+        <button id="soundToggleBtn" title="Toggle Sound" class="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-colors text-sm flex items-center gap-1.5">
+          <span id="soundIcon">🔊</span>
+        </button>
+        <span class="text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          P2P Encrypted
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 flex flex-col max-w-5xl w-full mx-auto p-4 sm:p-6 overflow-hidden">
+    
+    <!-- LOBBY SCREEN (Create / Join Room) -->
+    <section id="lobbyScreen" class="flex-1 flex flex-col justify-center items-center py-8">
+      <div class="w-full max-w-md bg-slate-900/80 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl relative">
+        
+        <div class="text-center mb-6">
+          <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 mb-4">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+          </div>
+          <h2 class="text-2xl font-bold text-white">Instant 2-Person Chat</h2>
+          <p class="text-sm text-slate-400 mt-1">Direct peer-to-peer connection. No signup, no logs, vercel ready.</p>
+        </div>
+
+        <!-- Name Input -->
+        <div class="mb-5">
+          <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Apna Naam Likhe (Your Name)</label>
+          <div class="relative">
+            <input type="text" id="usernameInput" maxlength="25" placeholder="e.g. Aman / Rahul" 
+                   class="w-full px-4 py-3 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition" />
+          </div>
+        </div>
+
+        <!-- Create Room Tab / Panel -->
+        <div id="roomCreateSection" class="space-y-4">
+          <button id="createRoomBtn" class="w-full py-3.5 px-4 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-semibold rounded-xl shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all transform active:scale-[0.99]">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Create New Chat Room
+          </button>
+
+          <div class="relative flex items-center justify-center">
+            <div class="border-t border-slate-800 w-full"></div>
+            <span class="bg-slate-900 px-3 text-xs uppercase tracking-wider text-slate-500">Ya Phir (Or Join)</span>
+            <div class="border-t border-slate-800 w-full"></div>
+          </div>
+
+          <!-- Join with Code Form -->
+          <div class="space-y-2">
+            <div class="flex gap-2">
+              <input type="text" id="joinRoomInput" placeholder="Enter Room Code (e.g. K8F2M9)" 
+                     class="flex-1 uppercase tracking-widest px-4 py-3 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-500 text-center font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition" />
+              <button id="joinRoomBtn" class="py-3 px-5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl shadow-lg shadow-emerald-600/30 flex items-center justify-center transition active:scale-[0.99]">
+                Join
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detected invite alert (shown when query param ?room=xyz is present) -->
+        <div id="inviteBanner" class="hidden mt-4 p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-center">
+          <p class="text-xs text-indigo-300 font-medium">Aapko chat invite mila hai!</p>
+          <p class="text-sm font-semibold text-white mt-1">Room: <span id="inviteRoomDisplay" class="font-mono text-emerald-400"></span></p>
+          <button id="acceptInviteBtn" class="mt-3 w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition">
+            Join This Chat Now
+          </button>
+        </div>
+
+        <!-- Waiting Card (shown after creator clicks Create Room) -->
+        <div id="waitingCard" class="hidden mt-5 p-4 rounded-xl bg-slate-800/90 border border-slate-700 text-center space-y-3">
+          <div class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-400 mb-1">
+            <span class="w-3 h-3 rounded-full bg-emerald-400 animate-ping"></span>
+          </div>
+          <h3 class="text-sm font-semibold text-white">Room Ban Gaya Hai!</h3>
+          <p class="text-xs text-slate-400">Ye link apne friend ko send kare. Jaise hi wo open karega, chat start ho jayegi.</p>
+          
+          <div class="flex items-center gap-2 bg-slate-900 p-2 rounded-lg border border-slate-700/80">
+            <input id="shareLinkInput" readonly class="bg-transparent text-xs text-slate-300 font-mono w-full outline-none px-2 select-all" />
+            <button id="copyLinkBtn" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md whitespace-nowrap transition flex items-center gap-1">
+              <span>Copy Link</span>
+            </button>
+          </div>
+
+          <div class="text-xs text-amber-400/90 flex items-center justify-center gap-1.5 pt-1">
+            <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            Waiting for your friend to open the link...
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- CHAT SCREEN (Active 2-person chat) -->
+    <section id="chatScreen" class="hidden flex-1 flex flex-col h-[calc(100vh-6.5rem)] max-h-[850px] bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-xl">
+      
+      <!-- Chat Header -->
+      <div class="p-3.5 sm:p-4 bg-slate-800/80 border-b border-slate-700/80 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="relative">
+            <div id="partnerAvatar" class="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white font-bold text-lg shadow-md">
+              ?
+            </div>
+            <span id="partnerStatusIndicator" class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 ring-2 ring-slate-800"></span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 id="partnerNameDisplay" class="font-bold text-white text-sm sm:text-base">Connecting...</h3>
+              <span id="connectionBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-medium border border-emerald-500/20">Active</span>
+            </div>
+            <p id="partnerStatusSub" class="text-xs text-slate-400">Direct Peer Connection</p>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <!-- Room code info badge -->
+          <button id="roomCodeBadge" title="Click to copy invite link" class="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 transition">
+            <span class="text-slate-500">Room:</span>
+            <span id="activeRoomCode" class="font-mono text-indigo-400 font-bold"></span>
+            <svg class="w-3.5 h-3.5 ml-1 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+            </svg>
+          </button>
+
+          <!-- Download chat history -->
+          <button id="downloadChatBtn" title="Save Chat History" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+          </button>
+
+          <!-- Leave chat button -->
+          <button id="leaveChatBtn" title="End Chat" class="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-medium transition flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+            </svg>
+            <span class="hidden sm:inline">Leave</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Messages Area -->
+      <div id="messagesContainer" class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3.5 scroll-smooth">
+        <!-- System greeting bubble -->
+        <div class="flex justify-center">
+          <div class="bg-slate-800/80 border border-slate-700/60 rounded-full px-4 py-1 text-[11px] text-slate-400 text-center">
+            🔒 End-to-end direct peer chat connected. Messages are not stored on any server.
+          </div>
+        </div>
+      </div>
+
+      <!-- Typing Indicator -->
+      <div id="typingIndicator" class="hidden px-6 py-1.5 text-xs text-indigo-400 italic flex items-center gap-2">
+        <span class="inline-flex gap-1 items-center">
+          <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce"></span>
+          <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce [animation-delay:0.2s]"></span>
+          <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce [animation-delay:0.4s]"></span>
+        </span>
+        <span id="typingText">Partner is typing...</span>
+      </div>
+
+      <!-- Quick Emoji Bar -->
+      <div class="px-4 py-1.5 bg-slate-900/60 border-t border-slate-800/60 flex items-center gap-2 overflow-x-auto text-base">
+        <span class="text-[11px] text-slate-500 uppercase tracking-wider font-semibold mr-1">Quick:</span>
+        <button class="quick-emoji hover:scale-125 transition-transform" data-emoji="👍">👍</button>
+        <button class="quick-emoji hover:scale-125 transition-transform" data-emoji="❤️">❤️</button>
+        <button class="quick-emoji hover:scale-125 transition-transform" data-emoji="😂">😂</button>
+        <button class="quick-emoji hover:scale-125 transition-transform" data-emoji="🔥">🔥</button>
+        <button class="quick-emoji hover:scale-125 transition-transform" data-emoji="😍">😍</button>
+        <button class="quick-emoji hover:scale-125 transition-transform" data-emoji="🎉">🎉</button>
+        <button class="quick-emoji hover:scale-125 transition-transform" data-emoji="👋">👋</button>
+        <button class="quick-emoji hover:scale-125 transition-transform" data-emoji="🙏">🙏</button>
+      </div>
+
+      <!-- Message Input Bar -->
+      <div class="p-3 sm:p-4 bg-slate-800/60 border-t border-slate-700/80">
+        <form id="chatForm" class="flex items-center gap-2" onsubmit="return false;">
+          
+          <!-- Image Attachment Button -->
+          <label title="Send Image" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer transition flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            <input type="file" id="imageInput" accept="image/*" class="hidden" />
+          </label>
+
+          <!-- Input Text Area -->
+          <input type="text" id="messageInput" autocomplete="off" placeholder="Type a message... (Press Enter to send)" 
+                 class="flex-1 px-4 py-3 bg-slate-800 border border-slate-700/80 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm sm:text-base" />
+
+          <!-- Send Button -->
+          <button type="submit" id="sendBtn" class="py-3 px-5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-semibold rounded-xl shadow-lg shadow-indigo-600/30 flex items-center justify-center transition">
+            <svg class="w-5 h-5 transform rotate-90" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
+            </svg>
+          </button>
+        </form>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Notification Toast Container -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-24 opacity-0 transition-all duration-300 pointer-events-none bg-slate-800 text-white px-4 py-2.5 rounded-xl border border-slate-700 shadow-xl flex items-center gap-2 text-sm">
+    <span id="toastIcon">✨</span>
+    <span id="toastMessage">Notification</span>
+  </div>
+
+  <footer class="py-3 text-center text-xs text-slate-500 border-t border-slate-900">
+    2Chat &bull; Realtime Peer-to-Peer 1-on-1 Chat &bull; Deploy ready for Vercel
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
