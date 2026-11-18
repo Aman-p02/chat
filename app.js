@@ -497,13 +497,31 @@ function escapeHtml(string) {
 
 // ----------------- AUTO-REMOVE NETLIFY BADGE / DRAWER -----------------
 function removeNetlifyBadge() {
-  const elements = document.querySelectorAll('[id*="netlify"], [class*="netlify"], iframe[src*="netlify"], a[href*="netlify.com"]');
-  elements.forEach((el) => {
-    try { el.remove(); } catch (e) {}
+  const selectors = [
+    '#nl-badge-frame',
+    '#nl-hud-frame',
+    '[id*="nl-badge"]',
+    '[id*="nl-hud"]',
+    'iframe[title*="Netlify"]',
+    'iframe[title*="Powered by Netlify"]',
+    'iframe[src*="netlify"]',
+    'iframe[src*="hud"]',
+    'netlify-badge',
+    'netlify-drawer',
+    '#netlify-drawer',
+    '[id*="netlify"]',
+    '[class*="netlify"]',
+    'a[href*="netlify.com"]'
+  ];
+
+  selectors.forEach((sel) => {
+    try {
+      document.querySelectorAll(sel).forEach((el) => el.remove());
+    } catch (e) {}
   });
 
   // Target any element with text "Powered by Netlify"
-  document.querySelectorAll('div, a, span, p').forEach((el) => {
+  document.querySelectorAll('div, a, span, p, iframe').forEach((el) => {
     if (el.textContent && el.textContent.includes('Powered by Netlify') && !el.closest('#messagesContainer')) {
       try { el.remove(); } catch (e) {}
     }
