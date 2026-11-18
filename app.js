@@ -495,8 +495,33 @@ function escapeHtml(string) {
   return div.innerHTML;
 }
 
+// ----------------- AUTO-REMOVE NETLIFY BADGE / DRAWER -----------------
+function removeNetlifyBadge() {
+  const elements = document.querySelectorAll('[id*="netlify"], [class*="netlify"], iframe[src*="netlify"], a[href*="netlify.com"]');
+  elements.forEach((el) => {
+    try { el.remove(); } catch (e) {}
+  });
+
+  // Target any element with text "Powered by Netlify"
+  document.querySelectorAll('div, a, span, p').forEach((el) => {
+    if (el.textContent && el.textContent.includes('Powered by Netlify') && !el.closest('#messagesContainer')) {
+      try { el.remove(); } catch (e) {}
+    }
+  });
+}
+
+// Continuous observer to remove it immediately upon injection
+const netlifyObserver = new MutationObserver(() => {
+  removeNetlifyBadge();
+});
+netlifyObserver.observe(document.documentElement, { childList: true, subtree: true });
+
 // ----------------- INITIALIZE ON LOAD -----------------
 window.addEventListener('DOMContentLoaded', () => {
+  removeNetlifyBadge();
+  setTimeout(removeNetlifyBadge, 500);
+  setTimeout(removeNetlifyBadge, 1500);
+  setTimeout(removeNetlifyBadge, 3000);
   loadSavedMessages();
   scrollChatToBottom();
   connectRealtime();

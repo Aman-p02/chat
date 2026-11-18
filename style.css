@@ -60,3 +60,24 @@ html, body {
   word-break: break-word;
   overflow-wrap: break-word;
 }
+
+/* Force-hide Netlify badge, drawer and preview injection */
+#netlify-drawer,
+[id*="netlify"],
+[class*="netlify"],
+iframe[src*="netlify"],
+iframe[id*="netlify"],
+a[href*="netlify.com"],
+[data-netlify-deploy-id],
+[data-netlify-drawer] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: fixed !important;
+  left: -9999px !important;
+  bottom: -9999px !important;
+  width: 0 !important;
+  height: 0 !important;
+  z-index: -999999 !important;
+}
