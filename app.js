@@ -350,14 +350,42 @@ function hideTypingIndicator() {
   typingIndicator.classList.add('hidden');
 }
 
-// ----------------- QUICK EMOJIS -----------------
-document.querySelectorAll('.quick-emoji').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const emoji = btn.getAttribute('data-emoji');
-    messageInput.value += emoji;
-    messageInput.focus();
+// ----------------- EMOJI PICKER POPUP -----------------
+const emojiToggleBtn = document.getElementById('emojiToggleBtn');
+const emojiPicker = document.getElementById('emojiPicker');
+const closeEmojiPickerBtn = document.getElementById('closeEmojiPickerBtn');
+
+if (emojiToggleBtn && emojiPicker) {
+  emojiToggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    emojiPicker.classList.toggle('hidden');
   });
-});
+
+  if (closeEmojiPickerBtn) {
+    closeEmojiPickerBtn.addEventListener('click', () => {
+      emojiPicker.classList.add('hidden');
+    });
+  }
+
+  document.querySelectorAll('.emoji-item').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const emoji = btn.getAttribute('data-emoji');
+      const start = messageInput.selectionStart ?? messageInput.value.length;
+      const end = messageInput.selectionEnd ?? messageInput.value.length;
+      messageInput.value = messageInput.value.substring(0, start) + emoji + messageInput.value.substring(end);
+      messageInput.focus();
+      messageInput.selectionStart = messageInput.selectionEnd = start + emoji.length;
+    });
+  });
+
+  // Close emoji picker when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!emojiPicker.contains(e.target) && e.target !== emojiToggleBtn && !emojiToggleBtn.contains(e.target)) {
+      emojiPicker.classList.add('hidden');
+    }
+  });
+}
 
 // ----------------- RENDER MESSAGE BUBBLES -----------------
 function appendChatMessage({ sender, text, time, isMe }) {
@@ -371,14 +399,14 @@ function appendChatMessage({ sender, text, time, isMe }) {
   const bubble = document.createElement('div');
   bubble.className = `max-w-[85%] sm:max-w-[70%] rounded-2xl px-4 py-2.5 shadow-md ${
     isMe
-      ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-br-xs'
-      : 'bg-slate-800 border border-slate-700/80 text-slate-100 rounded-bl-xs'
+      ? 'bg-gradient-to-r from-pink-600 to-rose-500 text-white rounded-br-xs shadow-pink-950/40'
+      : 'bg-slate-900/90 backdrop-blur-md border border-slate-800 text-slate-100 rounded-bl-xs'
   }`;
 
   bubble.innerHTML = `
-    ${!isMe ? `<div class="text-[11px] font-semibold text-emerald-400 mb-0.5">${escapeHtml(sender)}</div>` : ''}
+    ${!isMe ? `<div class="text-[11px] font-semibold text-pink-400 mb-0.5">${escapeHtml(sender)}</div>` : ''}
     <div class="message-content text-sm leading-relaxed">${safeText}</div>
-    <div class="flex items-center justify-end gap-1 mt-1 text-[10px] ${isMe ? 'text-indigo-200' : 'text-slate-400'}">
+    <div class="flex items-center justify-end gap-1 mt-1 text-[10px] ${isMe ? 'text-pink-100' : 'text-slate-400'}">
       <span>${time}</span>
       ${isMe ? '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>' : ''}
     </div>
@@ -398,16 +426,16 @@ function appendImageMessage({ sender, imageUrl, time, isMe }) {
   const bubble = document.createElement('div');
   bubble.className = `max-w-[85%] sm:max-w-[70%] rounded-2xl p-2 shadow-md ${
     isMe
-      ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-br-xs'
-      : 'bg-slate-800 border border-slate-700 text-slate-100 rounded-bl-xs'
+      ? 'bg-gradient-to-r from-pink-600 to-rose-500 text-white rounded-br-xs shadow-pink-950/40'
+      : 'bg-slate-900/90 backdrop-blur-md border border-slate-800 text-slate-100 rounded-bl-xs'
   }`;
 
   bubble.innerHTML = `
-    ${!isMe ? `<div class="text-[11px] font-semibold text-emerald-400 mb-1 px-1">${escapeHtml(sender)}</div>` : ''}
-    <div class="overflow-hidden rounded-xl max-h-72 bg-black/20">
+    ${!isMe ? `<div class="text-[11px] font-semibold text-pink-400 mb-1 px-1">${escapeHtml(sender)}</div>` : ''}
+    <div class="overflow-hidden rounded-xl max-h-72 bg-black/30">
       <img src="${imageUrl}" alt="Shared image" class="w-full h-auto object-cover hover:scale-105 transition-transform duration-200 cursor-pointer" onclick="window.open('${imageUrl}', '_blank')" />
     </div>
-    <div class="flex items-center justify-end gap-1 mt-1 px-1 text-[10px] ${isMe ? 'text-indigo-200' : 'text-slate-400'}">
+    <div class="flex items-center justify-end gap-1 mt-1 px-1 text-[10px] ${isMe ? 'text-pink-100' : 'text-slate-400'}">
       <span>${time}</span>
       ${isMe ? '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>' : ''}
     </div>
@@ -452,14 +480,14 @@ function renderStoredMessage({ sender, text, time, isMe }) {
   const bubble = document.createElement('div');
   bubble.className = `max-w-[85%] sm:max-w-[70%] rounded-2xl px-4 py-2.5 shadow-md ${
     isMe
-      ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-br-xs'
-      : 'bg-slate-800 border border-slate-700/80 text-slate-100 rounded-bl-xs'
+      ? 'bg-gradient-to-r from-pink-600 to-rose-500 text-white rounded-br-xs shadow-pink-950/40'
+      : 'bg-slate-900/90 backdrop-blur-md border border-slate-800 text-slate-100 rounded-bl-xs'
   }`;
 
   bubble.innerHTML = `
-    ${!isMe ? `<div class="text-[11px] font-semibold text-emerald-400 mb-0.5">${escapeHtml(sender)}</div>` : ''}
+    ${!isMe ? `<div class="text-[11px] font-semibold text-pink-400 mb-0.5">${escapeHtml(sender)}</div>` : ''}
     <div class="message-content text-sm leading-relaxed">${safeText}</div>
-    <div class="flex items-center justify-end gap-1 mt-1 text-[10px] ${isMe ? 'text-indigo-200' : 'text-slate-400'}">
+    <div class="flex items-center justify-end gap-1 mt-1 text-[10px] ${isMe ? 'text-pink-100' : 'text-slate-400'}">
       <span>${time}</span>
       ${isMe ? '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>' : ''}
     </div>
