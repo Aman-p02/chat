@@ -1,41 +1,36 @@
 /**
- * 2Chat - Private Realtime 1-on-1 Chat Application
- * Built with PeerJS (WebRTC) for zero-backend serverless hosting on Vercel.
+ * Direct Chat - Instant Realtime Messaging
+ * Zero room codes, zero backend needed. Works instantly on Vercel & Netlify!
  */
 
-// Application State
-let peer = null;
-let conn = null;
-let myName = 'Me';
-let partnerName = 'Friend';
-let currentRoom = '';
-let isHost = false;
-let soundEnabled = true;
+// Unique channel identifier
+const urlParams = new URLSearchParams(window.location.search);
+const CHAT_TOPIC = urlParams.get('channel') 
+  ? `directchat/custom/${urlParams.get('channel')}` 
+  : 'directchat/aman_direct_2person_hub_v1';
+
+// User State (Saved in LocalStorage)
+let myUserId = localStorage.getItem('direct_chat_user_id');
+if (!myUserId) {
+  myUserId = 'user_' + Math.random().toString(36).substring(2, 9);
+  localStorage.setItem('direct_chat_user_id', myUserId);
+}
+
+let myName = localStorage.getItem('direct_chat_username');
+if (!myName) {
+  myName = 'User ' + Math.floor(100 + Math.random() * 900);
+  localStorage.setItem('direct_chat_username', myName);
+}
+
+let soundEnabled = localStorage.getItem('direct_chat_sound') !== 'false';
 let typingTimeout = null;
-const chatHistory = [];
 
 // DOM Elements
-const lobbyScreen = document.getElementById('lobbyScreen');
-const chatScreen = document.getElementById('chatScreen');
-const usernameInput = document.getElementById('usernameInput');
-const createRoomBtn = document.getElementById('createRoomBtn');
-const joinRoomInput = document.getElementById('joinRoomInput');
-const joinRoomBtn = document.getElementById('joinRoomBtn');
-const waitingCard = document.getElementById('waitingCard');
-const shareLinkInput = document.getElementById('shareLinkInput');
-const copyLinkBtn = document.getElementById('copyLinkBtn');
-const inviteBanner = document.getElementById('inviteBanner');
-const inviteRoomDisplay = document.getElementById('inviteRoomDisplay');
-const acceptInviteBtn = document.getElementById('acceptInviteBtn');
-
-// Chat DOM Elements
-const partnerAvatar = document.getElementById('partnerAvatar');
-const partnerNameDisplay = document.getElementById('partnerNameDisplay');
-const partnerStatusSub = document.getElementById('partnerStatusSub');
-const partnerStatusIndicator = document.getElementById('partnerStatusIndicator');
 const connectionBadge = document.getElementById('connectionBadge');
-const activeRoomCode = document.getElementById('activeRoomCode');
-const roomCodeBadge = document.getElementById('roomCodeBadge');
+const usernameInput = document.getElementById('usernameInput');
+const soundToggleBtn = document.getElementById('soundToggleBtn');
+const soundIcon = document.getElementById('soundIcon');
+const clearChatBtn = document.getElementById('clearChatBtn');
 const messagesContainer = document.getElementById('messagesContainer');
 const typingIndicator = document.getElementById('typingIndicator');
 const typingText = document.getElementById('typingText');
@@ -43,15 +38,37 @@ const chatForm = document.getElementById('chatForm');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
 const imageInput = document.getElementById('imageInput');
-const downloadChatBtn = document.getElementById('downloadChatBtn');
-const leaveChatBtn = document.getElementById('leaveChatBtn');
-const soundToggleBtn = document.getElementById('soundToggleBtn');
-const soundIcon = document.getElementById('soundIcon');
 const toast = document.getElementById('toast');
 const toastMessage = document.getElementById('toastMessage');
 const toastIcon = document.getElementById('toastIcon');
 
-// ----------------- SOUND SYNTHESIZER (Web Audio API) -----------------
+// Initialize username input
+usernameInput.value = myName;
+usernameInput.addEventListener('change', () => {
+  const newName = usernameInput.value.trim();
+  if (newName) {
+    myName = newName;
+    localStorage.setItem('direct_chat_username', myName);
+    showToast(`Name updated to "${myName}"`, '👤');
+  } else {
+    usernameInput.value = myName;
+  }
+});
+
+// Sound button state
+updateSoundIcon();
+soundToggleBtn.addEventListener('click', () => {
+  soundEnabled = !soundEnabled;
+  localStorage.setItem('direct_chat_sound', soundEnabled);
+  updateSoundIcon();
+  showToast(soundEnabled ? 'Sound enabled' : 'Sound muted', soundEnabled ? '🔊' : '🔇');
+});
+
+function updateSoundIcon() {
+  soundIcon.textContent = soundEnabled ? '🔊' : '🔇';
+}
+
+// ----------------- SOUND SYNTHESIZER (Pure Web Audio API) -----------------
 const AudioContextClass = window.AudioContext || window.webkitAudioContext;
 let audioCtx = null;
 
@@ -77,16 +94,16 @@ function playSound(type) {
     gain.connect(audioCtx.destination);
 
     if (type === 'send') {
-      // Soft high blip
+      // Gentle send pop
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(600, now);
-      osc.frequency.exponentialRampToValueAtTime(900, now + 0.08);
+      osc.frequency.setValueAtTime(580, now);
+      osc.frequency.exponentialRampToValueAtTime(880, now + 0.08);
       gain.gain.setValueAtTime(0.15, now);
       gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
       osc.start(now);
       osc.stop(now + 0.09);
     } else if (type === 'receive') {
-      // Double pleasant chime
+      // Pleasant double chime
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(520, now);
       osc.frequency.setValueAtTime(780, now + 0.07);
@@ -94,28 +111,9 @@ function playSound(type) {
       gain.gain.exponentialRampToValueAtTime(0.01, now + 0.22);
       osc.start(now);
       osc.stop(now + 0.23);
-    } else if (type === 'connect') {
-      // Uplifting chime
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(440, now);
-      osc.frequency.setValueAtTime(660, now + 0.1);
-      osc.frequency.setValueAtTime(880, now + 0.2);
-      gain.gain.setValueAtTime(0.25, now);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
-      osc.start(now);
-      osc.stop(now + 0.36);
-    } else if (type === 'disconnect') {
-      // Descending tone
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(500, now);
-      osc.frequency.linearRampToValueAtTime(260, now + 0.2);
-      gain.gain.setValueAtTime(0.2, now);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
-      osc.start(now);
-      osc.stop(now + 0.26);
     }
   } catch (e) {
-    console.warn('Audio play error:', e);
+    console.warn('Audio error:', e);
   }
 }
 
@@ -131,251 +129,123 @@ function showToast(message, icon = '✨') {
   toastTimer = setTimeout(() => {
     toast.classList.add('opacity-0', 'translate-y-24', 'pointer-events-none');
     toast.classList.remove('opacity-100', 'translate-y-0');
-  }, 2800);
+  }, 2500);
 }
 
-// ----------------- GENERATE ROOM CODE -----------------
-function generateRoomCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}
+// ----------------- REALTIME WEBSOCKET (MQTT) -----------------
+const BROKERS = [
+  'wss://broker.emqx.io:8084/mqtt',
+  'wss://broker.hivemq.com:8884/mqtt'
+];
 
-function getFullPeerId(code) {
-  return `2chat-room-${code.trim().toUpperCase()}`;
-}
+let currentBrokerIndex = 0;
+let client = null;
 
-// ----------------- ROOM CREATION & JOINING -----------------
-function getUserName() {
-  const name = usernameInput.value.trim();
-  return name.length > 0 ? name : 'User_' + Math.floor(100 + Math.random() * 900);
-}
+function connectRealtime() {
+  const brokerUrl = BROKERS[currentBrokerIndex];
+  
+  updateBadge('connecting');
 
-// Host creates room
-createRoomBtn.addEventListener('click', () => {
-  initAudio();
-  myName = getUserName();
-  const roomCode = generateRoomCode();
-  currentRoom = roomCode;
-  isHost = true;
+  client = mqtt.connect(brokerUrl, {
+    clean: true,
+    connectTimeout: 5000,
+    reconnectPeriod: 2500,
+    clientId: 'client_' + myUserId + '_' + Math.random().toString(16).substring(2, 6)
+  });
 
-  const fullId = getFullPeerId(roomCode);
-  createRoomBtn.disabled = true;
-  createRoomBtn.innerHTML = `
-    <svg class="animate-spin w-5 h-5 text-white" fill="none" viewBox="0 0 24 24">
-      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-    </svg>
-    Connecting...
-  `;
-
-  if (peer) peer.destroy();
-  peer = new Peer(fullId, { debug: 1 });
-
-  peer.on('open', (id) => {
-    createRoomBtn.disabled = false;
-    createRoomBtn.innerHTML = `Create New Chat Room`;
+  client.on('connect', () => {
+    updateBadge('connected');
+    showToast('Direct chat connected! Ready.', '🟢');
     
-    // Generate share link
-    const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
-    shareLinkInput.value = inviteUrl;
-    waitingCard.classList.remove('hidden');
-    showToast('Room created! Share link with partner.', '🎉');
-  });
-
-  peer.on('connection', (connection) => {
-    conn = connection;
-    setupConnectionListeners();
-  });
-
-  peer.on('error', (err) => {
-    console.error('Peer error:', err);
-    createRoomBtn.disabled = false;
-    createRoomBtn.innerHTML = `Create New Chat Room`;
-    if (err.type === 'unavailable-id') {
-      showToast('Room code conflict. Generating another...', '⚠️');
-      // Retry with new code
-      createRoomBtn.click();
-    } else {
-      showToast('Connection error: ' + err.type, '❌');
-    }
-  });
-});
-
-// Join Room from Code
-joinRoomBtn.addEventListener('click', () => {
-  const code = joinRoomInput.value.trim().toUpperCase();
-  if (!code) {
-    showToast('Please enter room code', '⚠️');
-    joinRoomInput.focus();
-    return;
-  }
-  joinExistingRoom(code);
-});
-
-// Accept Invite from URL
-acceptInviteBtn.addEventListener('click', () => {
-  const urlParams = new URLSearchParams(window.location.search);
-  const code = urlParams.get('room');
-  if (code) {
-    joinExistingRoom(code);
-  }
-});
-
-function joinExistingRoom(roomCode) {
-  initAudio();
-  myName = getUserName();
-  currentRoom = roomCode.toUpperCase();
-  isHost = false;
-
-  joinRoomBtn.disabled = true;
-  joinRoomBtn.textContent = 'Joining...';
-
-  if (peer) peer.destroy();
-  // Guest uses random peer ID
-  peer = new Peer({ debug: 1 });
-
-  peer.on('open', (myPeerId) => {
-    const targetPeerId = getFullPeerId(currentRoom);
-    conn = peer.connect(targetPeerId, { reliable: true });
-    setupConnectionListeners();
-  });
-
-  peer.on('error', (err) => {
-    console.error('Join error:', err);
-    joinRoomBtn.disabled = false;
-    joinRoomBtn.textContent = 'Join';
-    if (err.type === 'peer-unavailable') {
-      showToast('Room not found! Creator might have closed the tab.', '❌');
-    } else {
-      showToast('Error joining room: ' + err.type, '⚠️');
-    }
-  });
-}
-
-// ----------------- CONNECTION LISTENERS -----------------
-function setupConnectionListeners() {
-  if (!conn) return;
-
-  conn.on('open', () => {
-    // Send initial handshake with my username
-    conn.send({
-      type: 'handshake',
-      name: myName
+    // Subscribe to chat topic
+    client.subscribe(CHAT_TOPIC, { qos: 0 }, (err) => {
+      if (err) console.error('Subscription error:', err);
     });
-
-    transitionToChatScreen();
-    playSound('connect');
-    showToast('Connected with partner!', '🤝');
   });
 
-  conn.on('data', (data) => {
-    handleIncomingData(data);
+  client.on('reconnect', () => {
+    updateBadge('connecting');
   });
 
-  conn.on('close', () => {
-    handlePartnerDisconnected();
+  client.on('offline', () => {
+    updateBadge('offline');
   });
 
-  conn.on('error', (err) => {
-    console.error('Data connection error:', err);
+  client.on('error', (err) => {
+    console.error('MQTT error:', err);
+    updateBadge('offline');
+    // Switch to fallback broker if error persists
+    client.end(true);
+    currentBrokerIndex = (currentBrokerIndex + 1) % BROKERS.length;
+    setTimeout(connectRealtime, 2000);
+  });
+
+  // Listen for incoming messages
+  client.on('message', (topic, message) => {
+    try {
+      const payload = JSON.parse(message.toString());
+      handleIncomingPacket(payload);
+    } catch (e) {
+      console.warn('Failed to parse message:', e);
+    }
   });
 }
 
-// ----------------- INCOMING DATA ROUTER -----------------
-function handleIncomingData(data) {
+function updateBadge(status) {
+  if (status === 'connected') {
+    connectionBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium flex items-center gap-1';
+    connectionBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Live Connected';
+  } else if (status === 'connecting') {
+    connectionBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium flex items-center gap-1';
+    connectionBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span> Connecting...';
+  } else {
+    connectionBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 font-medium flex items-center gap-1';
+    connectionBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> Offline';
+  }
+}
+
+// ----------------- HANDLE INCOMING PACKETS -----------------
+function handleIncomingPacket(data) {
   if (!data || !data.type) return;
 
-  switch (data.type) {
-    case 'handshake':
-      partnerName = data.name || 'Friend';
-      updatePartnerUI();
-      // If host, reply back with handshake
-      if (isHost) {
-        conn.send({
-          type: 'handshake-ack',
-          name: myName
-        });
-      }
-      appendSystemMessage(`${partnerName} joined the room! Say hello.`);
-      break;
+  const isMe = (data.userId === myUserId);
 
-    case 'handshake-ack':
-      partnerName = data.name || 'Friend';
-      updatePartnerUI();
-      appendSystemMessage(`Connected to ${partnerName}'s room!`);
-      break;
+  if (data.type === 'chat') {
+    hideTypingIndicator();
+    appendChatMessage({
+      sender: data.name || 'Anonymous',
+      text: data.text,
+      time: data.time || getCurrentTime(),
+      isMe: isMe
+    });
 
-    case 'chat':
-      hideTypingIndicator();
-      appendChatMessage({
-        sender: partnerName,
-        text: data.text,
-        time: data.time || getCurrentTime(),
-        isMe: false
-      });
+    if (!isMe) {
       playSound('receive');
-      break;
+    }
+  } else if (data.type === 'image') {
+    hideTypingIndicator();
+    appendImageMessage({
+      sender: data.name || 'Anonymous',
+      imageUrl: data.imageData,
+      time: data.time || getCurrentTime(),
+      isMe: isMe
+    });
 
-    case 'image':
-      hideTypingIndicator();
-      appendImageMessage({
-        sender: partnerName,
-        imageUrl: data.imageData,
-        caption: data.caption || '',
-        time: data.time || getCurrentTime(),
-        isMe: false
-      });
+    if (!isMe) {
       playSound('receive');
-      break;
-
-    case 'typing':
+    }
+  } else if (data.type === 'typing') {
+    if (!isMe) {
       if (data.isTyping) {
-        showTypingIndicator(`${partnerName} is typing...`);
+        showTypingIndicator(`${data.name || 'Someone'} is typing...`);
       } else {
         hideTypingIndicator();
       }
-      break;
-
-    case 'leave':
-      handlePartnerDisconnected();
-      break;
+    }
   }
 }
 
-// ----------------- UI SCREEN TRANSITIONS -----------------
-function transitionToChatScreen() {
-  lobbyScreen.classList.add('hidden');
-  chatScreen.classList.remove('hidden');
-
-  activeRoomCode.textContent = currentRoom;
-  updatePartnerUI();
-  messageInput.focus();
-}
-
-function updatePartnerUI() {
-  partnerNameDisplay.textContent = partnerName;
-  partnerAvatar.textContent = partnerName.charAt(0).toUpperCase();
-  partnerStatusIndicator.className = 'absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 ring-2 ring-slate-800';
-  partnerStatusSub.textContent = '🟢 Online & Ready';
-  connectionBadge.textContent = 'Connected';
-  connectionBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-medium border border-emerald-500/20';
-}
-
-function handlePartnerDisconnected() {
-  partnerStatusIndicator.className = 'absolute bottom-0 right-0 w-3 h-3 rounded-full bg-rose-500 ring-2 ring-slate-800';
-  partnerStatusSub.textContent = '🔴 Disconnected';
-  connectionBadge.textContent = 'Offline';
-  connectionBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 font-medium border border-rose-500/20';
-  appendSystemMessage(`${partnerName} left the chat or connection was lost.`);
-  playSound('disconnect');
-  showToast('Partner disconnected', '🔌');
-}
-
-// ----------------- MESSAGE SENDING -----------------
+// ----------------- SENDING MESSAGES -----------------
 chatForm.addEventListener('submit', (e) => {
   e.preventDefault();
   sendMessage();
@@ -387,33 +257,29 @@ sendBtn.addEventListener('click', (e) => {
 });
 
 function sendMessage() {
+  initAudio();
   const text = messageInput.value.trim();
   if (!text) return;
 
-  if (!conn || !conn.open) {
-    showToast('Cannot send: partner is not connected yet!', '⚠️');
+  if (!client || !client.connected) {
+    showToast('Connecting... Please wait a second', '⚠️');
     return;
   }
 
-  const timeStr = getCurrentTime();
-
-  // Send over peer connection
-  conn.send({
+  const packet = {
     type: 'chat',
+    userId: myUserId,
+    name: myName,
     text: text,
-    time: timeStr
-  });
+    time: getCurrentTime(),
+    timestamp: Date.now()
+  };
 
-  // Notify stopped typing
+  // Publish to topic
+  client.publish(CHAT_TOPIC, JSON.stringify(packet), { qos: 0 });
+
+  // Send typing false
   sendTypingStatus(false);
-
-  // Render on my own screen
-  appendChatMessage({
-    sender: myName,
-    text: text,
-    time: timeStr,
-    isMe: true
-  });
 
   playSound('send');
   messageInput.value = '';
@@ -422,18 +288,12 @@ function sendMessage() {
 
 // ----------------- IMAGE SENDING -----------------
 imageInput.addEventListener('change', (e) => {
+  initAudio();
   const file = e.target.files[0];
   if (!file) return;
 
-  if (!conn || !conn.open) {
-    showToast('Cannot send: partner is not connected!', '⚠️');
-    imageInput.value = '';
-    return;
-  }
-
-  // File size guard (max ~2MB for snappy P2P)
-  if (file.size > 2.5 * 1024 * 1024) {
-    showToast('Please select image under 2.5MB', '⚠️');
+  if (file.size > 2 * 1024 * 1024) {
+    showToast('Please select image under 2MB', '⚠️');
     imageInput.value = '';
     return;
   }
@@ -441,30 +301,25 @@ imageInput.addEventListener('change', (e) => {
   const reader = new FileReader();
   reader.onload = (event) => {
     const base64Data = event.target.result;
-    const timeStr = getCurrentTime();
-
-    conn.send({
+    const packet = {
       type: 'image',
+      userId: myUserId,
+      name: myName,
       imageData: base64Data,
-      time: timeStr
-    });
+      time: getCurrentTime(),
+      timestamp: Date.now()
+    };
 
-    appendImageMessage({
-      sender: myName,
-      imageUrl: base64Data,
-      time: timeStr,
-      isMe: true
-    });
-
+    client.publish(CHAT_TOPIC, JSON.stringify(packet), { qos: 0 });
     playSound('send');
     imageInput.value = '';
   };
   reader.readAsDataURL(file);
 });
 
-// ----------------- TYPING INDICATOR -----------------
+// ----------------- TYPING BROADCAST -----------------
 messageInput.addEventListener('input', () => {
-  if (!conn || !conn.open) return;
+  if (!client || !client.connected) return;
   sendTypingStatus(true);
 
   clearTimeout(typingTimeout);
@@ -474,11 +329,14 @@ messageInput.addEventListener('input', () => {
 });
 
 function sendTypingStatus(isTyping) {
-  if (conn && conn.open) {
-    conn.send({
+  if (client && client.connected) {
+    const packet = {
       type: 'typing',
+      userId: myUserId,
+      name: myName,
       isTyping: isTyping
-    });
+    };
+    client.publish(CHAT_TOPIC, JSON.stringify(packet), { qos: 0 });
   }
 }
 
@@ -503,7 +361,7 @@ document.querySelectorAll('.quick-emoji').forEach((btn) => {
 
 // ----------------- RENDER MESSAGE BUBBLES -----------------
 function appendChatMessage({ sender, text, time, isMe }) {
-  chatHistory.push({ sender, text, time, isMe });
+  saveMessageToLocal({ sender, text, time, isMe, type: 'chat' });
 
   const msgWrapper = document.createElement('div');
   msgWrapper.className = `flex ${isMe ? 'justify-end' : 'justify-start'} msg-animate`;
@@ -532,7 +390,7 @@ function appendChatMessage({ sender, text, time, isMe }) {
 }
 
 function appendImageMessage({ sender, imageUrl, time, isMe }) {
-  chatHistory.push({ sender, text: '[Image]', time, isMe });
+  saveMessageToLocal({ sender, imageUrl, time, isMe, type: 'image' });
 
   const msgWrapper = document.createElement('div');
   msgWrapper.className = `flex ${isMe ? 'justify-end' : 'justify-start'} msg-animate`;
@@ -560,104 +418,70 @@ function appendImageMessage({ sender, imageUrl, time, isMe }) {
   scrollChatToBottom();
 }
 
-function appendSystemMessage(text) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'flex justify-center msg-animate my-2';
-  wrapper.innerHTML = `
-    <div class="bg-slate-800/60 border border-slate-700/50 rounded-full px-3.5 py-1 text-xs text-slate-400 text-center flex items-center gap-1.5">
-      <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-      ${escapeHtml(text)}
-    </div>
-  `;
-  messagesContainer.appendChild(wrapper);
-  scrollChatToBottom();
-}
-
 function scrollChatToBottom() {
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-// ----------------- COPY LINK / SHARE -----------------
-copyLinkBtn.addEventListener('click', () => {
-  copyTextToClipboard(shareLinkInput.value);
-});
-
-roomCodeBadge.addEventListener('click', () => {
-  const url = `${window.location.origin}${window.location.pathname}?room=${currentRoom}`;
-  copyTextToClipboard(url);
-});
-
-function copyTextToClipboard(text) {
-  if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(text).then(() => {
-      showToast('Invite link copied to clipboard!', '📋');
-    }).catch(() => {
-      fallbackCopy(text);
-    });
-  } else {
-    fallbackCopy(text);
-  }
-}
-
-function fallbackCopy(text) {
-  const textArea = document.createElement('textarea');
-  textArea.value = text;
-  textArea.style.position = 'fixed';
-  document.body.appendChild(textArea);
-  textArea.focus();
-  textArea.select();
+// ----------------- LOCAL HISTORY STORAGE -----------------
+function saveMessageToLocal(msg) {
   try {
-    document.execCommand('copy');
-    showToast('Invite link copied!', '📋');
-  } catch (err) {
-    showToast('Failed to copy link', '❌');
-  }
-  document.body.removeChild(textArea);
+    const list = JSON.parse(localStorage.getItem('direct_chat_history') || '[]');
+    list.push(msg);
+    // Keep last 40 messages
+    if (list.length > 40) list.shift();
+    localStorage.setItem('direct_chat_history', JSON.stringify(list));
+  } catch (e) {}
 }
 
-// ----------------- DOWNLOAD CHAT HISTORY -----------------
-downloadChatBtn.addEventListener('click', () => {
-  if (chatHistory.length === 0) {
-    showToast('No messages to save yet!', 'ℹ️');
-    return;
+function loadSavedMessages() {
+  try {
+    const list = JSON.parse(localStorage.getItem('direct_chat_history') || '[]');
+    list.forEach((msg) => {
+      if (msg.type === 'chat') {
+        renderStoredMessage(msg);
+      }
+    });
+  } catch (e) {}
+}
+
+function renderStoredMessage({ sender, text, time, isMe }) {
+  const msgWrapper = document.createElement('div');
+  msgWrapper.className = `flex ${isMe ? 'justify-end' : 'justify-start'}`;
+
+  const safeText = escapeHtml(text);
+  const bubble = document.createElement('div');
+  bubble.className = `max-w-[85%] sm:max-w-[70%] rounded-2xl px-4 py-2.5 shadow-md ${
+    isMe
+      ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-br-xs'
+      : 'bg-slate-800 border border-slate-700/80 text-slate-100 rounded-bl-xs'
+  }`;
+
+  bubble.innerHTML = `
+    ${!isMe ? `<div class="text-[11px] font-semibold text-emerald-400 mb-0.5">${escapeHtml(sender)}</div>` : ''}
+    <div class="message-content text-sm leading-relaxed">${safeText}</div>
+    <div class="flex items-center justify-end gap-1 mt-1 text-[10px] ${isMe ? 'text-indigo-200' : 'text-slate-400'}">
+      <span>${time}</span>
+      ${isMe ? '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>' : ''}
+    </div>
+  `;
+
+  msgWrapper.appendChild(bubble);
+  messagesContainer.appendChild(msgWrapper);
+}
+
+// Clear Chat button
+clearChatBtn.addEventListener('click', () => {
+  if (confirm('Clear chat messages on your screen?')) {
+    localStorage.removeItem('direct_chat_history');
+    messagesContainer.innerHTML = `
+      <div class="flex justify-center">
+        <div class="bg-slate-800/70 border border-slate-700/60 rounded-xl px-4 py-2 text-xs text-slate-300 text-center max-w-md shadow-sm">
+          ✨ Messages cleared. Direct Chat is live and ready!
+        </div>
+      </div>
+    `;
+    showToast('Chat cleared', '🧹');
   }
-
-  let fileContent = `=== 2Chat Conversation ===\nRoom: ${currentRoom}\nDate: ${new Date().toLocaleDateString()}\n\n`;
-  chatHistory.forEach((msg) => {
-    fileContent += `[${msg.time}] ${msg.sender}: ${msg.text}\n`;
-  });
-
-  const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
-  const downloadUrl = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = downloadUrl;
-  a.download = `chat-${currentRoom}-${Date.now()}.txt`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(downloadUrl);
-  showToast('Chat history downloaded!', '💾');
-});
-
-// ----------------- LEAVE CHAT -----------------
-leaveChatBtn.addEventListener('click', () => {
-  if (confirm('Are you sure you want to leave this chat room?')) {
-    if (conn && conn.open) {
-      conn.send({ type: 'leave' });
-      conn.close();
-    }
-    if (peer) {
-      peer.destroy();
-    }
-    window.location.href = window.location.pathname;
-  }
-});
-
-// ----------------- SOUND TOGGLE -----------------
-soundToggleBtn.addEventListener('click', () => {
-  soundEnabled = !soundEnabled;
-  soundIcon.textContent = soundEnabled ? '🔊' : '🔇';
-  showToast(soundEnabled ? 'Sounds enabled' : 'Sounds muted', soundEnabled ? '🔊' : '🔇');
 });
 
 // ----------------- UTILITY FUNCTIONS -----------------
@@ -672,19 +496,9 @@ function escapeHtml(string) {
   return div.innerHTML;
 }
 
-// ----------------- URL QUERY PARAM CHECK (INVITE DETECTION) -----------------
+// ----------------- INITIALIZE ON LOAD -----------------
 window.addEventListener('DOMContentLoaded', () => {
-  const urlParams = new URLSearchParams(window.location.search);
-  const roomParam = urlParams.get('room');
-
-  if (roomParam) {
-    const cleanedCode = roomParam.trim().toUpperCase();
-    joinRoomInput.value = cleanedCode;
-    inviteRoomDisplay.textContent = cleanedCode;
-    inviteBanner.classList.remove('hidden');
-    // Pre-fill friendly random name suggestion if blank
-    if (!usernameInput.value) {
-      usernameInput.placeholder = 'e.g. Rahul / Guest';
-    }
-  }
+  loadSavedMessages();
+  scrollChatToBottom();
+  connectRealtime();
 });
