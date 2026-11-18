@@ -193,14 +193,14 @@ function connectRealtime() {
 
 function updateBadge(status) {
   if (status === 'connected') {
-    connectionBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium flex items-center gap-1';
-    connectionBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Live Connected';
+    connectionBadge.className = 'flex items-center gap-1 text-[11px] text-emerald-400 font-medium';
+    connectionBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400"></span> Online';
   } else if (status === 'connecting') {
-    connectionBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium flex items-center gap-1';
-    connectionBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span> Connecting...';
+    connectionBadge.className = 'flex items-center gap-1 text-[11px] text-amber-400 font-medium';
+    connectionBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> Connecting';
   } else {
-    connectionBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 font-medium flex items-center gap-1';
-    connectionBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> Offline';
+    connectionBadge.className = 'flex items-center gap-1 text-[11px] text-rose-400 font-medium';
+    connectionBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-400"></span> Offline';
   }
 }
 
@@ -473,15 +473,14 @@ function renderStoredMessage({ sender, text, time, isMe }) {
 clearChatBtn.addEventListener('click', () => {
   if (confirm('Clear chat messages on your screen?')) {
     localStorage.removeItem('direct_chat_history');
-    messagesContainer.innerHTML = `
-      <div class="flex justify-center">
-        <div class="bg-slate-800/70 border border-slate-700/60 rounded-xl px-4 py-2 text-xs text-slate-300 text-center max-w-md shadow-sm">
-          ✨ Messages cleared. Direct Chat is live and ready!
-        </div>
-      </div>
-    `;
+    messagesContainer.innerHTML = '';
     showToast('Chat cleared', '🧹');
   }
+});
+
+// Mobile virtual keyboard focus scroll
+messageInput.addEventListener('focus', () => {
+  setTimeout(scrollChatToBottom, 300);
 });
 
 // ----------------- UTILITY FUNCTIONS -----------------
