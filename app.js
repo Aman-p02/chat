@@ -243,8 +243,25 @@ function connectRealtime() {
 
 // ----------------- BACKGROUND NOTIFICATION & TITLE BLINK -----------------
 function triggerBackgroundAlert(sender, previewText) {
-  // 1. Desktop Notification (if user is on another tab or app)
-  if (document.hidden) {
+  const isBackground = document.hidden || !document.hasFocus();
+
+  if (isBackground) {
+    unreadMessagesCount++;
+
+    // 1. Instantly set title with exact unread count: (1) Chat, (2) Chat
+    document.title = `(${unreadMessagesCount}) Chat`;
+
+    // 2. Start gentle blink keeping the count always in front so Chrome never cuts it
+    if (titleBlinkInterval) clearInterval(titleBlinkInterval);
+    let toggle = false;
+    titleBlinkInterval = setInterval(() => {
+      toggle = !toggle;
+      document.title = toggle 
+        ? `(${unreadMessagesCount}) 💬 New Message!` 
+        : `(${unreadMessagesCount}) Chat`;
+    }, 1200);
+
+    // 3. Desktop Native Notification (if permission granted)
     if ('Notification' in window && Notification.permission === 'granted' && notificationsEnabled) {
       try {
         const notif = new Notification(`${sender}`, {
@@ -261,16 +278,6 @@ function triggerBackgroundAlert(sender, previewText) {
         console.warn('Desktop notification error:', err);
       }
     }
-
-    // 2. Tab Title Blinking Alert
-    unreadMessagesCount++;
-    if (!titleBlinkInterval) {
-      let toggle = false;
-      titleBlinkInterval = setInterval(() => {
-        document.title = toggle ? `🔔 (${unreadMessagesCount}) New message!` : `💬 ${sender}: ${previewText}`;
-        toggle = !toggle;
-      }, 1000);
-    }
   }
 }
 
@@ -283,7 +290,7 @@ function stopTitleAlert() {
   document.title = ORIGINAL_TITLE;
 }
 
-// Reset title alert on window focus or tab visibility
+// Reset title alert on window focus, tab visibility or page click
 window.addEventListener('focus', stopTitleAlert);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
@@ -293,6 +300,11 @@ document.addEventListener('visibilitychange', () => {
       updateBadge('connecting');
       if (client) client.reconnect();
     }
+  }
+});
+document.addEventListener('click', () => {
+  if (unreadMessagesCount > 0) {
+    stopTitleAlert();
   }
 });
 
