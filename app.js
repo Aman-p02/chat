@@ -23,11 +23,17 @@ if (!myName) {
 }
 
 let soundEnabled = localStorage.getItem('direct_chat_sound') !== 'false';
+let notificationsEnabled = localStorage.getItem('direct_chat_notif') !== 'false';
 let typingTimeout = null;
+let unreadMessagesCount = 0;
+let titleBlinkInterval = null;
+const ORIGINAL_TITLE = 'Chat';
 
 // DOM Elements
 const connectionBadge = document.getElementById('connectionBadge');
 const usernameInput = document.getElementById('usernameInput');
+const notifToggleBtn = document.getElementById('notifToggleBtn');
+const notifIcon = document.getElementById('notifIcon');
 const soundToggleBtn = document.getElementById('soundToggleBtn');
 const soundIcon = document.getElementById('soundIcon');
 const clearChatBtn = document.getElementById('clearChatBtn');
@@ -54,6 +60,49 @@ usernameInput.addEventListener('change', () => {
     usernameInput.value = myName;
   }
 });
+
+// Notification button state & handling
+updateNotifIcon();
+if (notifToggleBtn) {
+  notifToggleBtn.addEventListener('click', () => {
+    if (!('Notification' in window)) {
+      showToast('Notifications not supported by browser', '⚠️');
+      return;
+    }
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().then((perm) => {
+        if (perm === 'granted') {
+          notificationsEnabled = true;
+          localStorage.setItem('direct_chat_notif', 'true');
+          showToast('Desktop notifications enabled!', '🔔');
+        } else {
+          notificationsEnabled = false;
+          localStorage.setItem('direct_chat_notif', 'false');
+          showToast('Notifications permission denied', '⚠️');
+        }
+        updateNotifIcon();
+      });
+    } else if (Notification.permission === 'granted') {
+      notificationsEnabled = !notificationsEnabled;
+      localStorage.setItem('direct_chat_notif', notificationsEnabled);
+      showToast(notificationsEnabled ? 'Notifications ON' : 'Notifications OFF', notificationsEnabled ? '🔔' : '🔕');
+      updateNotifIcon();
+    } else {
+      showToast('Please enable notifications in browser settings', '⚠️');
+    }
+  });
+}
+
+function updateNotifIcon() {
+  if (!notifIcon || !('Notification' in window)) return;
+  if (Notification.permission === 'granted' && notificationsEnabled) {
+    notifIcon.textContent = '🔔';
+    if (notifToggleBtn) notifToggleBtn.title = 'Desktop Notifications Enabled';
+  } else {
+    notifIcon.textContent = '🔕';
+    if (notifToggleBtn) notifToggleBtn.title = 'Click to enable Desktop Notifications';
+  }
+}
 
 // Sound button state
 updateSoundIcon();
@@ -182,6 +231,7 @@ function connectRealtime() {
 
   // Listen for incoming messages
   client.on('message', (topic, message) => {
+    if (topic.endsWith('/keepalive')) return; // Ignore silent keepalive pings
     try {
       const payload = JSON.parse(message.toString());
       handleIncomingPacket(payload);
@@ -189,6 +239,88 @@ function connectRealtime() {
       console.warn('Failed to parse message:', e);
     }
   });
+}
+
+// ----------------- BACKGROUND NOTIFICATION & TITLE BLINK -----------------
+function triggerBackgroundAlert(sender, previewText) {
+  // 1. Desktop Notification (if user is on another tab or app)
+  if (document.hidden) {
+    if ('Notification' in window && Notification.permission === 'granted' && notificationsEnabled) {
+      try {
+        const notif = new Notification(`${sender}`, {
+          body: previewText,
+          icon: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💬</text></svg>',
+          tag: 'direct-chat-msg',
+          renotify: true
+        });
+        notif.onclick = () => {
+          window.focus();
+          notif.close();
+        };
+      } catch (err) {
+        console.warn('Desktop notification error:', err);
+      }
+    }
+
+    // 2. Tab Title Blinking Alert
+    unreadMessagesCount++;
+    if (!titleBlinkInterval) {
+      let toggle = false;
+      titleBlinkInterval = setInterval(() => {
+        document.title = toggle ? `🔔 (${unreadMessagesCount}) New message!` : `💬 ${sender}: ${previewText}`;
+        toggle = !toggle;
+      }, 1000);
+    }
+  }
+}
+
+function stopTitleAlert() {
+  if (titleBlinkInterval) {
+    clearInterval(titleBlinkInterval);
+    titleBlinkInterval = null;
+  }
+  unreadMessagesCount = 0;
+  document.title = ORIGINAL_TITLE;
+}
+
+// Reset title alert on window focus or tab visibility
+window.addEventListener('focus', stopTitleAlert);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    stopTitleAlert();
+    // Auto-reconnect if connection was dropped while tab was in background
+    if (!client || !client.connected) {
+      updateBadge('connecting');
+      if (client) client.reconnect();
+    }
+  }
+});
+
+// ----------------- BACKGROUND KEEP-ALIVE WORKER -----------------
+// Web Workers are not throttled by Chrome like standard window timers,
+// keeping WebSocket active and preventing Chrome tab discarding!
+try {
+  const workerBlob = new Blob([`
+    let timer = null;
+    self.onmessage = function(e) {
+      if (e.data === 'start') {
+        if (timer) clearInterval(timer);
+        timer = setInterval(() => postMessage('ping'), 12000);
+      }
+    };
+  `], { type: 'application/javascript' });
+
+  const keepAliveWorker = new Worker(URL.createObjectURL(workerBlob));
+  keepAliveWorker.onmessage = () => {
+    if (client && client.connected) {
+      client.publish(CHAT_TOPIC + '/keepalive', JSON.stringify({ t: Date.now() }), { qos: 0 });
+    } else if (client && !client.connected) {
+      client.reconnect();
+    }
+  };
+  keepAliveWorker.postMessage('start');
+} catch (e) {
+  console.warn('Keep-alive worker setup error:', e);
 }
 
 function updateBadge(status) {
@@ -221,6 +353,7 @@ function handleIncomingPacket(data) {
 
     if (!isMe) {
       playSound('receive');
+      triggerBackgroundAlert(data.name || 'Someone', data.text);
     }
   } else if (data.type === 'image') {
     hideTypingIndicator();
@@ -233,6 +366,7 @@ function handleIncomingPacket(data) {
 
     if (!isMe) {
       playSound('receive');
+      triggerBackgroundAlert(data.name || 'Someone', '📷 Sent a photo');
     }
   } else if (data.type === 'typing') {
     if (!isMe) {
@@ -571,4 +705,12 @@ window.addEventListener('DOMContentLoaded', () => {
   loadSavedMessages();
   scrollChatToBottom();
   connectRealtime();
+  updateNotifIcon();
+
+  // Request notification permission on first click
+  document.addEventListener('click', () => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().then(() => updateNotifIcon());
+    }
+  }, { once: true });
 });
